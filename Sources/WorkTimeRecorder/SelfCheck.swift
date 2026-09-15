@@ -124,6 +124,28 @@ enum SelfCheck {
         let afterDemo = try? Data(contentsOf: store.fileStore.fileURL)
         record(beforeDemo == afterDemo, "演示模式不会写入真实数据文件", &passes, &failures)
 
+        // 11. 午休扣除：09:00–18:00 默认扣掉 12:00–13:30，净 7.5 小时
+        let lunchCalendar = AppCalendar.calendar()
+        var lunchLedger = WorkTimeLedger()
+        if let start = lunchCalendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date()),
+           let end = lunchCalendar.date(bySettingHour: 18, minute: 0, second: 0, of: Date()) {
+            try? lunchLedger.clockIn(at: start, source: .manual, calendar: lunchCalendar)
+            try? lunchLedger.clockOut(at: end, source: .manual, calendar: lunchCalendar)
+            let net = WorkTimeCalculator.workedSeconds(
+                ledger: lunchLedger,
+                dayKey: AppCalendar.dayKey(for: start, calendar: lunchCalendar),
+                now: end,
+                settings: Settings(),
+                calendar: lunchCalendar
+            )
+            record(
+                abs(net - 7.5 * 3600) < 1,
+                "午休已从工时中扣除（默认 12:00 – 13:30，9:00–18:00 → 净 \(DurationFormat.text(net))）",
+                &passes,
+                &failures
+            )
+        }
+
         for line in passes { print("  ✅ \(line)") }
         for line in failures { print("  ❌ \(line)") }
         print(failures.isEmpty ? "self-check 通过（\(passes.count) 项）" : "self-check 失败（\(failures.count) 项）")

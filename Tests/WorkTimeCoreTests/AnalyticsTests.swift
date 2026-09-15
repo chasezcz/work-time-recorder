@@ -39,7 +39,9 @@ import Testing
 
         #expect(stats.buckets.count == 7)
         #expect(stats.activeDayCount == 2)
-        #expect(abs(stats.totalWorkedSeconds - (9 * 3600 + 9.5 * 3600)) < 1)
+        // 每天各扣除默认午休 1.5 小时：(9 − 1.5) + (9.5 − 1.5) = 15.5 小时
+        #expect(abs(stats.totalWorkedSeconds - 15.5 * 3600) < 1)
+        #expect(abs(stats.totalBreakSeconds - 3 * 3600) < 1)
         // 目标只累计到今天为止的工作日：周一、周二、周三 = 3 天 × 8h。
         #expect(stats.requiredDayCount == 3)
         #expect(abs(stats.totalTargetSeconds - 24 * 3600) < 1)
@@ -59,7 +61,8 @@ import Testing
         let saturday = stats.days.first { $0.dateKey == "2026-09-19" }!
         #expect(saturday.targetSeconds == 0)
         #expect(saturday.isOffDay)
-        #expect(abs(saturday.overtimeSeconds - 5 * 3600) < 1)
+        // 10:00–15:00 毛 5 小时，扣除午休 1.5 小时后记为 3.5 小时加班
+        #expect(abs(saturday.overtimeSeconds - 3.5 * 3600) < 1)
     }
 
     @Test func holidayMakesWorkdayOffAndMakeupDayWorking() {
@@ -110,7 +113,8 @@ import Testing
         )
         #expect(quarter.buckets.count == 3)
         #expect(quarter.buckets.map(\.title) == ["7月", "8月", "9月"])
-        #expect(abs(quarter.buckets[2].workedSeconds - 9 * 3600) < 1)
+        // 09:00–18:00 毛 9 小时，扣除午休后 7.5 小时
+        #expect(abs(quarter.buckets[2].workedSeconds - 7.5 * 3600) < 1)
 
         let year = Analytics.periodStats(
             ledger: ledger, settings: Settings(), granularity: .year,
@@ -137,8 +141,34 @@ import Testing
             ledger: ledger, settings: Settings(), granularity: .day,
             containing: date("2026-09-15 21:00"), now: date("2026-09-15 21:00"), calendar: calendar
         )
+        // 毛 12 小时 − 午休 1.5 小时 = 净 10.5 小时，加班 2.5 小时
         #expect(stats.isTargetReached)
-        #expect(abs(stats.overtimeSeconds - 4 * 3600) < 1)
+        #expect(abs(stats.overtimeSeconds - 2.5 * 3600) < 1)
         #expect(stats.completionRatio == 1)
+    }
+
+    @Test func lunchBreakIsExcludedFromDailyStats() {
+        let ledger = makeLedger([("2026-09-15 09:00", "2026-09-15 18:00")])
+        let stats = Analytics.periodStats(
+            ledger: ledger, settings: Settings(), granularity: .day,
+            containing: date("2026-09-15 20:00"), now: date("2026-09-15 20:00"), calendar: calendar
+        )
+        let day = stats.days[0]
+        #expect(abs(day.workedSeconds - 7.5 * 3600) < 1)
+        #expect(abs(day.breakSeconds - 1.5 * 3600) < 1)
+        #expect(!stats.isTargetReached)
+    }
+
+    @Test func disablingLunchBreakKeepsGrossHours() {
+        var settings = Settings()
+        settings.lunchBreak.isEnabled = false
+        let ledger = makeLedger([("2026-09-15 09:00", "2026-09-15 18:00")])
+        let stats = Analytics.periodStats(
+            ledger: ledger, settings: settings, granularity: .day,
+            containing: date("2026-09-15 20:00"), now: date("2026-09-15 20:00"), calendar: calendar
+        )
+        #expect(abs(stats.totalWorkedSeconds - 9 * 3600) < 1)
+        #expect(stats.totalBreakSeconds == 0)
+        #expect(stats.isTargetReached)
     }
 }

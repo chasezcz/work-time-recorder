@@ -112,6 +112,8 @@ public struct Settings: Codable, Equatable, Sendable {
     public var showDockIcon: Bool
     /// 时区标识：默认北京时间 `Asia/Shanghai`，也可以是 `system` 表示跟随系统。
     public var timeZoneIdentifier: String
+    /// 午休时段（默认 12:00 – 13:30，不计入工时）。
+    public var lunchBreak: LunchBreak
 
     public init(
         dailyTargetSeconds: TimeInterval = Settings.defaultDailyTargetSeconds,
@@ -123,7 +125,8 @@ public struct Settings: Codable, Equatable, Sendable {
         holidayCountryCode: String = "CN",
         showTimeInMenuBar: Bool = true,
         showDockIcon: Bool = true,
-        timeZoneIdentifier: String = AppTimeZone.beijingIdentifier
+        timeZoneIdentifier: String = AppTimeZone.beijingIdentifier,
+        lunchBreak: LunchBreak = LunchBreak()
     ) {
         self.dailyTargetSeconds = dailyTargetSeconds
         self.automaticClockInEnabled = automaticClockInEnabled
@@ -135,6 +138,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.showTimeInMenuBar = showTimeInMenuBar
         self.showDockIcon = showDockIcon
         self.timeZoneIdentifier = timeZoneIdentifier
+        self.lunchBreak = lunchBreak
     }
 
     public var autoClockInLabel: String {
@@ -165,6 +169,7 @@ public struct Settings: Codable, Equatable, Sendable {
         case showTimeInMenuBar
         case showDockIcon
         case timeZoneIdentifier
+        case lunchBreak
     }
 
     public init(from decoder: Decoder) throws {
@@ -180,6 +185,7 @@ public struct Settings: Codable, Equatable, Sendable {
         showTimeInMenuBar = (try? container.decode(Bool.self, forKey: .showTimeInMenuBar)) ?? defaults.showTimeInMenuBar
         showDockIcon = (try? container.decode(Bool.self, forKey: .showDockIcon)) ?? defaults.showDockIcon
         timeZoneIdentifier = (try? container.decode(String.self, forKey: .timeZoneIdentifier)) ?? defaults.timeZoneIdentifier
+        lunchBreak = (try? container.decode(LunchBreak.self, forKey: .lunchBreak)) ?? defaults.lunchBreak
         normalize()
     }
 
@@ -195,6 +201,7 @@ public struct Settings: Codable, Equatable, Sendable {
         if !AppTimeZone.isValid(identifier: timeZoneIdentifier) {
             timeZoneIdentifier = AppTimeZone.beijingIdentifier
         }
+        lunchBreak.normalize()
     }
 }
 

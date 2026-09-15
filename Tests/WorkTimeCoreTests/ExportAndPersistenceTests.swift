@@ -24,13 +24,20 @@ import Testing
         try ledger.clockOut(at: date("2026-09-15 18:35"), source: .manual, calendar: calendar)
         let interval = AppCalendar.interval(for: .day, containing: date("2026-09-15 12:00"), calendar: calendar)
 
-        let csv = CSVExport.sessionsCSV(ledger: ledger, interval: interval, now: date("2026-09-15 20:00"), calendar: calendar)
+        let csv = CSVExport.sessionsCSV(
+            ledger: ledger,
+            settings: Settings(),
+            interval: interval,
+            now: date("2026-09-15 20:00"),
+            calendar: calendar
+        )
         #expect(csv.hasPrefix("\u{FEFF}"))
         let lines = csv.split(separator: "\n")
         #expect(lines.count == 2)
         #expect(lines[0].contains("日期,星期,节假日,开始时间"))
         #expect(lines[1].contains("2026-09-15,周二"))
-        #expect(lines[1].contains("09:05,18:35,9.50"))
+        #expect(lines[0].contains("午休扣除"))
+        #expect(lines[1].contains("09:05,18:35,9.50,1.50,8.00"))
         #expect(lines[1].contains("解锁自动上班"))
     }
 
@@ -38,7 +45,13 @@ import Testing
         var ledger = WorkTimeLedger()
         try ledger.clockIn(at: date("2026-09-15 09:00"), source: .manual, calendar: calendar)
         let interval = AppCalendar.interval(for: .day, containing: date("2026-09-15 12:00"), calendar: calendar)
-        let csv = CSVExport.sessionsCSV(ledger: ledger, interval: interval, now: date("2026-09-15 12:00"), calendar: calendar)
+        let csv = CSVExport.sessionsCSV(
+            ledger: ledger,
+            settings: Settings(),
+            interval: interval,
+            now: date("2026-09-15 12:00"),
+            calendar: calendar
+        )
         #expect(csv.contains("进行中"))
     }
 
@@ -57,7 +70,9 @@ import Testing
         let lines = csv.split(separator: "\n")
         #expect(lines.count == 8) // 表头 + 7 天
         #expect(csv.contains("2026-09-15,周二,工作日"))
-        #expect(csv.contains("已达标"))
+        // 09:00–18:00 毛 9 小时，扣除默认午休 1.5 小时后净 7.5 小时，未达标
+        #expect(csv.contains("8.00,1.50,7.50"))
+        #expect(csv.contains("未达标"))
         #expect(csv.contains("2026-09-19,周六,休息日"))
     }
 
@@ -71,6 +86,7 @@ import Testing
         let interval = AppCalendar.interval(for: .day, containing: date("2026-01-01 12:00"), calendar: calendar)
         let csv = CSVExport.sessionsCSV(
             ledger: ledger,
+            settings: Settings(),
             interval: interval,
             now: date("2026-01-01 12:00"),
             holidays: ["2026-01-01": holiday],

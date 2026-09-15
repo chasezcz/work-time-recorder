@@ -30,7 +30,7 @@ public enum AutoClockPolicy {
         let key = AppCalendar.dayKey(for: now, calendar: calendar)
         let target = ledger.targetSeconds(forDayKey: key, settings: settings)
         guard target > 0 else { return false }
-        return workedSecondsToday(ledger: ledger, now: now, calendar: calendar) >= target
+        return workedSecondsToday(ledger: ledger, now: now, settings: settings, calendar: calendar) >= target
     }
 
     /// 是否已过“自动上班时间门槛”（默认凌晨 4:00）。
@@ -49,15 +49,21 @@ public enum AutoClockPolicy {
         return now >= threshold
     }
 
-    /// 当天（0 点起）累计工时，进行中的片段算到 `now`。
+    /// 当天（0 点起）累计净工时，进行中的片段算到 `now`，并扣除午休时段。
     public static func workedSecondsToday(
         ledger: WorkTimeLedger,
         now: Date,
+        settings: Settings,
         calendar: Calendar = AppCalendar.calendar()
     ) -> TimeInterval {
         let key = AppCalendar.dayKey(for: now, calendar: calendar)
-        guard let interval = AppCalendar.dayInterval(forDayKey: key, calendar: calendar) else { return 0 }
-        return ledger.workedSeconds(in: interval, now: now)
+        return WorkTimeCalculator.workedSeconds(
+            ledger: ledger,
+            dayKey: key,
+            now: now,
+            settings: settings,
+            calendar: calendar
+        )
     }
 
     /// 是否需要发出“可以下班了”的提醒。
@@ -73,6 +79,6 @@ public enum AutoClockPolicy {
         guard !ledger.day(key).targetNotified else { return false }
         let target = ledger.targetSeconds(forDayKey: key, settings: settings)
         guard target > 0 else { return false }
-        return workedSecondsToday(ledger: ledger, now: now, calendar: calendar) >= target
+        return workedSecondsToday(ledger: ledger, now: now, settings: settings, calendar: calendar) >= target
     }
 }

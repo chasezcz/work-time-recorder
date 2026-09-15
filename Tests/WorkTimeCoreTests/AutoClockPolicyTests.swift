@@ -78,12 +78,13 @@ import Testing
 
     @Test func autoClockOutFiresWhenTargetReachedAndWorking() throws {
         var ledger = WorkTimeLedger()
-        try ledger.clockIn(at: date("2026-09-15 09:00"), source: .manual, calendar: calendar)
+        // 08:00 上班，到 18:00 毛 10 小时、扣除午休 1.5 小时后净 8.5 小时，已达标
+        try ledger.clockIn(at: date("2026-09-15 08:00"), source: .manual, calendar: calendar)
         #expect(
             AutoClockPolicy.shouldAutoClockOut(
                 settings: Settings(),
                 ledger: ledger,
-                now: date("2026-09-15 17:10"),
+                now: date("2026-09-15 18:00"),
                 calendar: calendar
             )
         )
@@ -131,8 +132,9 @@ import Testing
 
     @Test func targetNotificationFiresOnce() throws {
         var ledger = WorkTimeLedger()
-        try ledger.clockIn(at: date("2026-09-15 09:00"), source: .manual, calendar: calendar)
-        let now = date("2026-09-15 17:10")
+        try ledger.clockIn(at: date("2026-09-15 08:00"), source: .manual, calendar: calendar)
+        // 08:00 → 18:30 毛 10.5 小时，扣除午休后净 9 小时
+        let now = date("2026-09-15 18:30")
         #expect(
             AutoClockPolicy.shouldNotifyTargetReached(
                 settings: Settings(),

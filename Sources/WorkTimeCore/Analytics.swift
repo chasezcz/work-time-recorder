@@ -6,6 +6,8 @@ public struct DayStat: Identifiable, Equatable, Sendable {
     public let dateKey: String
     public let date: Date
     public let workedSeconds: TimeInterval
+    /// 该天被扣除的午休时长。
+    public let breakSeconds: TimeInterval
     public let targetSeconds: TimeInterval
     public let sessionCount: Int
     public let firstClockIn: Date?
@@ -18,6 +20,7 @@ public struct DayStat: Identifiable, Equatable, Sendable {
         dateKey: String,
         date: Date,
         workedSeconds: TimeInterval,
+        breakSeconds: TimeInterval,
         targetSeconds: TimeInterval,
         sessionCount: Int,
         firstClockIn: Date?,
@@ -29,6 +32,7 @@ public struct DayStat: Identifiable, Equatable, Sendable {
         self.dateKey = dateKey
         self.date = date
         self.workedSeconds = workedSeconds
+        self.breakSeconds = breakSeconds
         self.targetSeconds = targetSeconds
         self.sessionCount = sessionCount
         self.firstClockIn = firstClockIn
@@ -94,6 +98,8 @@ public struct PeriodStats: Equatable, Sendable {
     /// 需要达标的上班日数量（扣除周末与节假日，含调休补班）。
     public let requiredDayCount: Int
     public let overtimeSeconds: TimeInterval
+    /// 整个周期累计扣除的午休时长。
+    public let totalBreakSeconds: TimeInterval
     public let buckets: [BucketStat]
     public let days: [DayStat]
 
@@ -135,7 +141,20 @@ public enum Analytics {
             let key = AppCalendar.dayKey(for: dayStart, calendar: calendar)
             guard let dayInterval = AppCalendar.dayInterval(forDayKey: key, calendar: calendar) else { continue }
             let isFuture = dayStart > now
-            let worked = ledger.workedSeconds(in: dayInterval, now: now)
+            let worked = WorkTimeCalculator.workedSeconds(
+                ledger: ledger,
+                in: dayInterval,
+                now: now,
+                settings: settings,
+                calendar: calendar
+            )
+            let breakSeconds = WorkTimeCalculator.breakSeconds(
+                ledger: ledger,
+                in: dayInterval,
+                now: now,
+                settings: settings,
+                calendar: calendar
+            )
             let entries = ledger.sessions(in: dayInterval, now: now)
             let day = ledger.day(key)
             let holiday = holidays[key]
@@ -155,6 +174,7 @@ public enum Analytics {
                     dateKey: key,
                     date: dayStart,
                     workedSeconds: worked,
+                    breakSeconds: breakSeconds,
                     targetSeconds: target,
                     sessionCount: entries.count,
                     firstClockIn: entries.first?.start,
@@ -171,6 +191,7 @@ public enum Analytics {
         let activeDays = days.filter { $0.hasRecords }.count
         let requiredDays = days.filter { $0.targetSeconds > 0 }.count
         let overtime = days.reduce(0) { $0 + $1.overtimeSeconds }
+        let totalBreak = days.reduce(0) { $0 + $1.breakSeconds }
 
         return PeriodStats(
             granularity: granularity,
@@ -180,6 +201,7 @@ public enum Analytics {
             activeDayCount: activeDays,
             requiredDayCount: requiredDays,
             overtimeSeconds: overtime,
+            totalBreakSeconds: totalBreak,
             buckets: buckets(for: granularity, days: days, now: now, calendar: calendar),
             days: days
         )

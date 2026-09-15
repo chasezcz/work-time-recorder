@@ -70,6 +70,9 @@ final class SettingsViewController: NSViewController {
     }()
 
     private lazy var autoClockOutSwitch: NSSwitch = makeSwitch(action: #selector(autoClockOutToggled(_:)))
+    private lazy var lunchEnabledSwitch: NSSwitch = makeSwitch(action: #selector(lunchEnabledToggled(_:)))
+    private lazy var lunchStartPicker: NSDatePicker = makeTimePicker(action: #selector(lunchStartChanged(_:)))
+    private lazy var lunchEndPicker: NSDatePicker = makeTimePicker(action: #selector(lunchEndChanged(_:)))
     private lazy var notifySwitch: NSSwitch = makeSwitch(action: #selector(notifyToggled(_:)))
     private let notificationStatusLabel = UI.label("读取中…", font: Fonts.system(11), color: .secondaryLabelColor)
 
@@ -125,6 +128,7 @@ final class SettingsViewController: NSViewController {
         content.addArrangedSubview(makeTargetSection())
         content.addArrangedSubview(makeAutoClockInSection())
         content.addArrangedSubview(makeAutoClockOutSection())
+        content.addArrangedSubview(makeLunchSection())
         content.addArrangedSubview(makeNotificationSection())
         content.addArrangedSubview(makeHolidaySection())
         content.addArrangedSubview(makeMenuBarSection())
@@ -185,6 +189,36 @@ final class SettingsViewController: NSViewController {
             title: "自动下班",
             rows: [row(title: "工时达标后，锁屏自动记录下班", control: autoClockOutSwitch)],
             hint: "只有“已达标 + 锁屏或休眠”同时满足时才自动打卡。回来后如果想继续加班，在状态栏面板点“撤销下班”即可恢复上班状态。"
+        )
+    }
+
+    private func makeLunchSection() -> NSView {
+        let presets = UI.horizontalStack(spacing: 6)
+        let disableButton = NSButton(title: "无午休", target: self, action: #selector(lunchPresetTapped(_:)))
+        disableButton.tag = -1
+        disableButton.bezelStyle = .rounded
+        disableButton.controlSize = .small
+        disableButton.translatesAutoresizingMaskIntoConstraints = false
+        presets.addArrangedSubview(disableButton)
+        for (index, preset) in Self.lunchPresets.enumerated() {
+            let button = NSButton(title: preset.title, target: self, action: #selector(lunchPresetTapped(_:)))
+            button.tag = index
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.translatesAutoresizingMaskIntoConstraints = false
+            presets.addArrangedSubview(button)
+        }
+        presets.addArrangedSubview(UI.flexibleSpace())
+
+        return section(
+            title: "午休",
+            rows: [
+                row(title: "启用午休时间（不计入工时）", control: lunchEnabledSwitch),
+                row(title: "开始时间", control: lunchStartPicker),
+                row(title: "结束时间", control: lunchEndPicker),
+                presets
+            ],
+            hint: "午休时段会从打卡时长里扣除，不参与“已工作多久”和目标达标计算；午休期间如果有打卡记录，这段时间同样会被扣掉。默认 12:00 – 13:30。"
         )
     }
 
@@ -330,6 +364,11 @@ final class SettingsViewController: NSViewController {
         autoClockInPicker.isEnabled = settings.automaticClockInEnabled
         autoClockInPicker.dateValue = autoClockInDate()
         autoClockOutSwitch.state = settings.automaticClockOutEnabled ? .on : .off
+        lunchEnabledSwitch.state = settings.lunchBreak.isEnabled ? .on : .off
+        lunchStartPicker.isEnabled = settings.lunchBreak.isEnabled
+        lunchEndPicker.isEnabled = settings.lunchBreak.isEnabled
+        lunchStartPicker.dateValue = timePickerDate(minutes: settings.lunchBreak.startMinutes)
+        lunchEndPicker.dateValue = timePickerDate(minutes: settings.lunchBreak.endMinutes)
         notifySwitch.state = settings.notifyWhenTargetReached ? .on : .off
 
         if countryField.currentEditor() == nil {
@@ -370,6 +409,16 @@ final class SettingsViewController: NSViewController {
         timeZonePopup.selectItem(at: index)
     }
 
+    private func timePickerDate(minutes: Int) -> Date {
+        let base = store.calendar.startOfDay(for: Date())
+        return store.calendar.date(
+            bySettingHour: minutes / 60,
+            minute: minutes % 60,
+            second: 0,
+            of: base
+        ) ?? base
+    }
+
     private func autoClockInDate() -> Date {
         let settings = store.settings
         let base = store.calendar.startOfDay(for: Date())
@@ -407,6 +456,46 @@ final class SettingsViewController: NSViewController {
     @objc private func autoClockOutToggled(_ sender: NSSwitch) {
         let enabled = sender.state == .on
         store.updateSettings { $0.automaticClockOutEnabled = enabled }
+    }
+
+    @objc private func lunchEnabledToggled(_ sender: NSSwitch) {
+        let enabled = sender.state == .on
+        store.updateSettings { $0.lunchBreak.isEnabled = enabled }
+    }
+
+    @objc private func lunchStartChanged(_ sender: NSDatePicker) {
+        updateLunch(from: sender.dateValue, isStart: true)
+    }
+
+    @objc private func lunchEndChanged(_ sender: NSDatePicker) {
+        updateLunch(from: sender.dateValue, isStart: false)
+    }
+
+    @objc private func lunchPresetTapped(_ sender: NSButton) {
+        if sender.tag == -1 {
+            store.updateSettings { $0.lunchBreak.isEnabled = false }
+            return
+        }
+        let presets = Self.lunchPresets
+        guard sender.tag >= 0, sender.tag < presets.count else { return }
+        let preset = presets[sender.tag]
+        store.updateSettings { settings in
+            settings.lunchBreak.isEnabled = true
+            settings.lunchBreak.startMinutes = preset.startMinutes
+            settings.lunchBreak.endMinutes = preset.endMinutes
+        }
+    }
+
+    private func updateLunch(from date: Date, isStart: Bool) {
+        let components = store.calendar.dateComponents([.hour, .minute], from: date)
+        let minutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        store.updateSettings { settings in
+            if isStart {
+                settings.lunchBreak.startMinutes = minutes
+            } else {
+                settings.lunchBreak.endMinutes = minutes
+            }
+        }
     }
 
     @objc private func notifyToggled(_ sender: NSSwitch) {
@@ -459,6 +548,23 @@ final class SettingsViewController: NSViewController {
 
     private static func hoursTitle(_ hours: Double) -> String {
         hours.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(hours))h" : "\(hours)h"
+    }
+
+    private static let lunchPresets: [(startMinutes: Int, endMinutes: Int, title: String)] = [
+        (12 * 60, 13 * 60, "12:00 – 13:00"),
+        (12 * 60, 13 * 60 + 30, "12:00 – 13:30"),
+        (11 * 60 + 30, 13 * 60, "11:30 – 13:00"),
+        (12 * 60, 14 * 60, "12:00 – 14:00")
+    ]
+
+    private func makeTimePicker(action: Selector) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textField
+        picker.datePickerElements = .hourMinute
+        picker.target = self
+        picker.action = action
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        return picker
     }
 
     private static var version: String {

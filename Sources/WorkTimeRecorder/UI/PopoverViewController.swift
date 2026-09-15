@@ -20,6 +20,7 @@ final class PopoverViewController: NSViewController {
     private let ringCaptionLabel = UI.label("尚未打卡", font: Fonts.system(10), color: .secondaryLabelColor, alignment: .center)
     private let targetRow = InfoRowView(title: "今日目标")
     private let secondRow = InfoRowView(title: "剩余")
+    private let lunchRow = InfoRowView(title: "午休扣除")
     private let statusRow = InfoRowView(title: "状态")
 
     // 打卡
@@ -141,6 +142,7 @@ final class PopoverViewController: NSViewController {
         let info = UI.verticalStack(spacing: 7)
         info.addArrangedSubview(targetRow)
         info.addArrangedSubview(secondRow)
+        info.addArrangedSubview(lunchRow)
         info.addArrangedSubview(statusRow)
 
         row.addArrangedSubview(ringContainer)
@@ -245,6 +247,15 @@ final class PopoverViewController: NSViewController {
             secondRow.update(title: "完成度", value: "\(Int((store.todayProgress * 100).rounded()))%")
         }
         statusRow.value = store.statusSubtitle
+        let lunch = store.settings.lunchBreak
+        lunchRow.isHidden = !lunch.isEnabled
+        if lunch.isEnabled {
+            let deducted = store.todayLunchSeconds
+            lunchRow.update(
+                title: "午休 \(lunch.displayText)",
+                value: deducted > 0 ? "−\(DurationFormat.text(deducted))" : "0 分"
+            )
+        }
 
         clockInButton.isHidden = store.isWorking
         clockOutButton.isHidden = !store.isWorking

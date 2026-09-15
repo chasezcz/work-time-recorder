@@ -58,6 +58,7 @@ public enum CSVExport {
     /// 打卡明细：一行一段打卡记录。
     public static func sessionsCSV(
         ledger: WorkTimeLedger,
+        settings: Settings,
         interval: DateInterval,
         now: Date = Date(),
         holidays: [String: HolidayDay] = [:],
@@ -69,19 +70,30 @@ public enum CSVExport {
             let key = AppCalendar.dayKey(for: session.start, calendar: calendar)
             let crossesMidnight = AppCalendar.dayKey(for: max(entry.end, session.start), calendar: calendar) != key
             let endText = session.end == nil ? "进行中" : timeFormatter.string(from: entry.end)
+            let gross = entry.end.timeIntervalSince(entry.start)
+            let breakSeconds = WorkTimeCalculator.breakSeconds(
+                ledger: ledger,
+                in: DateInterval(start: entry.start, end: entry.end),
+                now: now,
+                settings: settings,
+                calendar: calendar
+            )
+            let net = max(0, gross - breakSeconds)
             return [
                 key,
                 AppCalendar.weekdayName(session.start, calendar: calendar),
                 holidayLabel(key, holidays: holidays),
                 timeFormatter.string(from: session.start),
                 endText,
-                DurationFormat.decimalHours(entry.end.timeIntervalSince(entry.start), fractionDigits: 2),
+                DurationFormat.decimalHours(gross, fractionDigits: 2),
+                DurationFormat.decimalHours(breakSeconds, fractionDigits: 2),
+                DurationFormat.decimalHours(net, fractionDigits: 2),
                 session.startSource.displayName,
                 session.endSource?.displayName ?? (session.end == nil ? "进行中" : ""),
                 crossesMidnight ? "是" : "否"
             ]
         }
-        let header = ["日期", "星期", "节假日", "开始时间", "结束时间", "时长(小时)", "上班方式", "下班方式", "跨天"]
+        let header = ["日期", "星期", "节假日", "开始时间", "结束时间", "时长(小时)", "午休扣除(小时)", "净工时(小时)", "上班方式", "下班方式", "跨天"]
         return bom + table(header: header, rows: rows)
     }
 
@@ -101,7 +113,20 @@ public enum CSVExport {
             let key = AppCalendar.dayKey(for: dayStart, calendar: calendar)
             guard let dayInterval = AppCalendar.dayInterval(forDayKey: key, calendar: calendar) else { continue }
             let entries = ledger.sessions(in: dayInterval, now: now)
-            let worked = entries.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }
+            let worked = WorkTimeCalculator.workedSeconds(
+                ledger: ledger,
+                in: dayInterval,
+                now: now,
+                settings: settings,
+                calendar: calendar
+            )
+            let breakSeconds = WorkTimeCalculator.breakSeconds(
+                ledger: ledger,
+                in: dayInterval,
+                now: now,
+                settings: settings,
+                calendar: calendar
+            )
             let holiday = holidays[key]
             let weekend = AppCalendar.isWeekend(dayStart, calendar: calendar)
             let isOffDay = holiday.map { $0.isOffDay } ?? weekend
@@ -131,6 +156,7 @@ public enum CSVExport {
                 isOffDay ? "休息日" : "工作日",
                 holidayLabel(key, holidays: holidays),
                 DurationFormat.decimalHours(target, fractionDigits: 2),
+                DurationFormat.decimalHours(breakSeconds, fractionDigits: 2),
                 DurationFormat.decimalHours(worked, fractionDigits: 2),
                 DurationFormat.decimalHours(worked - target, fractionDigits: 2),
                 String(format: "%.0f%%", ratio * 100),
@@ -141,7 +167,7 @@ public enum CSVExport {
             ])
         }
 
-        let header = ["日期", "星期", "日期类型", "节假日", "目标(小时)", "实际(小时)", "差额(小时)", "完成度", "打卡段数", "首次上班", "最后下班", "状态"]
+        let header = ["日期", "星期", "日期类型", "节假日", "目标(小时)", "午休扣除(小时)", "实际(小时)", "差额(小时)", "完成度", "打卡段数", "首次上班", "最后下班", "状态"]
         return bom + table(header: header, rows: rows)
     }
 

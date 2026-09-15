@@ -102,7 +102,24 @@ final class AppStore: ObservableObject {
     var canUndoClockOut: Bool { state.ledger.canUndoClockOut() }
 
     var todayWorkedSeconds: TimeInterval {
-        AutoClockPolicy.workedSecondsToday(ledger: state.ledger, now: now, calendar: calendar)
+        AutoClockPolicy.workedSecondsToday(
+            ledger: state.ledger,
+            now: now,
+            settings: state.settings,
+            calendar: calendar
+        )
+    }
+
+    /// 今天扣除的午休时长（只统计与打卡时间重叠的部分）。
+    var todayLunchSeconds: TimeInterval {
+        guard let interval = AppCalendar.dayInterval(forDayKey: todayKey, calendar: calendar) else { return 0 }
+        return WorkTimeCalculator.breakSeconds(
+            ledger: state.ledger,
+            in: interval,
+            now: now,
+            settings: state.settings,
+            calendar: calendar
+        )
     }
 
     var todayTargetSeconds: TimeInterval {
@@ -447,6 +464,7 @@ final class AppStore: ObservableObject {
         let interval = exportInterval(for: preset)
         return CSVExport.sessionsCSV(
             ledger: state.ledger,
+            settings: state.settings,
             interval: interval,
             now: now,
             holidays: holidayIndex(for: interval),
