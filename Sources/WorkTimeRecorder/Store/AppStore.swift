@@ -95,6 +95,22 @@ final class AppStore: ObservableObject {
 
     var todayKey: String { AppCalendar.dayKey(for: now, calendar: calendar) }
 
+    /// “今天”的时间轴窗口：从自动上班时间门槛（默认 04:00）直到次日同一时刻。
+    var todayWorkdayWindow: DateInterval {
+        AppCalendar.dayWindow(
+            anchoredOn: now,
+            startHour: state.settings.autoClockInHour,
+            startMinute: state.settings.autoClockInMinute,
+            calendar: calendar
+        )
+    }
+
+    /// 时间轴窗口文字，例如 `04:00 → 次日 04:00`。
+    var workdayWindowText: String {
+        let formatter = AppCalendar.formatter("HH:mm", calendar: calendar)
+        return "\(formatter.string(from: todayWorkdayWindow.start)) → 次日 \(formatter.string(from: todayWorkdayWindow.end))"
+    }
+
     var activeEntry: (dateKey: String, session: WorkSession)? { state.ledger.activeEntry() }
 
     var isWorking: Bool { state.ledger.isWorking }

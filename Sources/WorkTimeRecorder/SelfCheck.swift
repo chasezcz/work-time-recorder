@@ -146,6 +146,17 @@ enum SelfCheck {
             )
         }
 
+        // 12. 每日时间轴：04:00 → 次日 04:00
+        let workdayWindow = store.todayWorkdayWindow
+        let windowFormatter = AppCalendar.formatter("HH:mm", calendar: store.calendar)
+        record(
+            windowFormatter.string(from: workdayWindow.start) == "04:00"
+                && abs(workdayWindow.duration - 24 * 3600) < 1,
+            "每日时间轴窗口为 \(windowFormatter.string(from: workdayWindow.start)) → 次日 \(windowFormatter.string(from: workdayWindow.end))",
+            &passes,
+            &failures
+        )
+
         for line in passes { print("  ✅ \(line)") }
         for line in failures { print("  ❌ \(line)") }
         print(failures.isEmpty ? "self-check 通过（\(passes.count) 项）" : "self-check 失败（\(failures.count) 项）")

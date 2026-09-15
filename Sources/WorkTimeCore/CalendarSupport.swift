@@ -208,6 +208,28 @@ public enum AppCalendar {
         }
     }
 
+    /// “一天”的窗口：以任意整点开始、跨度 24 小时。
+    ///
+    /// 例如锚定在某天的 `04:00`，窗口就是【当天 04:00 → 次日 04:00】，
+    /// 用于把“每天的时间轴从凌晨四点开始算”。
+    public static func dayWindow(
+        anchoredOn date: Date,
+        startHour: Int,
+        startMinute: Int,
+        calendar: Calendar = AppCalendar.calendar()
+    ) -> DateInterval {
+        let anchorDay = calendar.startOfDay(for: date)
+        guard let start = calendar.date(
+            bySettingHour: min(max(startHour, 0), 23),
+            minute: min(max(startMinute, 0), 59),
+            second: 0,
+            of: anchorDay
+        ), let end = calendar.date(byAdding: .day, value: 1, to: start) else {
+            return DateInterval(start: anchorDay, end: anchorDay.addingTimeInterval(86400))
+        }
+        return DateInterval(start: start, end: end)
+    }
+
     /// 时间戳格式化（导出与界面共用）。
     public static func formatter(_ format: String, calendar: Calendar = AppCalendar.calendar()) -> DateFormatter {
         let formatter = DateFormatter()

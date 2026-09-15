@@ -195,15 +195,19 @@ final class StatisticsViewController: NSViewController {
             caption: stats.activeDayCount > 0 ? "平均每天 \(DurationFormat.text(stats.averageSecondsPerActiveDay))" : "暂无记录"
         )
 
-        chartTitleLabel.stringValue = granularity.chartTitle
         let isDay = granularity == .day
+        chartTitleLabel.stringValue = isDay
+            ? "今天时间轴（\(store.workdayWindowText)）"
+            : granularity.chartTitle
         chartView.isHidden = isDay
         timelineView.isHidden = !isDay
         timelineStack.isHidden = !isDay
 
         if isDay {
-            let entries = store.ledger.sessions(in: stats.interval, now: store.now)
-            timelineView.interval = stats.interval
+            let window = store.todayWorkdayWindow
+            let entries = store.ledger.sessions(in: window, now: store.now)
+            timelineView.calendar = store.calendar
+            timelineView.interval = window
             timelineView.segments = entries.map { (start: $0.start, end: $0.end) }
             rebuildTimelineRows(entries)
         } else {
@@ -239,14 +243,15 @@ final class StatisticsViewController: NSViewController {
             icon.translatesAutoresizingMaskIntoConstraints = false
             icon.widthAnchor.constraint(equalToConstant: 16).isActive = true
 
-            let range = "\(UI.time(entry.start, calendar: store.calendar)) – \(entry.session.end.map { _ in UI.time(entry.end, calendar: store.calendar) } ?? "进行中")"
+            let session = entry.session
+            let range = "\(UI.time(session.start, calendar: store.calendar)) – \(session.end.map { UI.time($0, calendar: store.calendar) } ?? "进行中")"
             let source = entry.session.endSource.map { "· \($0.shortName)" } ?? "· 进行中"
             row.addArrangedSubview(icon)
             row.addArrangedSubview(UI.label(range, font: Fonts.system(12)))
             row.addArrangedSubview(UI.label(source, font: Fonts.system(11), color: .secondaryLabelColor))
             row.addArrangedSubview(UI.flexibleSpace())
             row.addArrangedSubview(
-                UI.label(DurationFormat.text(entry.end.timeIntervalSince(entry.start)), font: Fonts.mono(12, .medium), alignment: .right)
+                UI.label(DurationFormat.text(session.duration(until: store.now)), font: Fonts.mono(12, .medium), alignment: .right)
             )
             timelineStack.addArrangedSubview(row)
         }

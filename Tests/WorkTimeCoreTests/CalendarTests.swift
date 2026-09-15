@@ -100,4 +100,39 @@ import Testing
         #expect(DurationFormat.decimalHours(9.5 * 3600) == "9.5")
         #expect(DurationFormat.clock(8 * 3600 + 5 * 60) == "08:05")
     }
+
+    @Test func workdayWindowRunsFromFourAMToNextFourAM() {
+        let window = AppCalendar.dayWindow(
+            anchoredOn: date("2026-09-15 03:00"),
+            startHour: 4,
+            startMinute: 0,
+            calendar: calendar
+        )
+        let timeFormatter = AppCalendar.formatter("HH:mm", calendar: calendar)
+        #expect(AppCalendar.dayKey(for: window.start, calendar: calendar) == "2026-09-15")
+        #expect(timeFormatter.string(from: window.start) == "04:00")
+        #expect(AppCalendar.dayKey(for: window.end, calendar: calendar) == "2026-09-16")
+        #expect(timeFormatter.string(from: window.end) == "04:00")
+        #expect(abs(window.duration - 24 * 3600) < 1)
+
+        // 锚定同一天的任意时刻都得到同一个窗口
+        let sameWindow = AppCalendar.dayWindow(
+            anchoredOn: date("2026-09-15 23:30"),
+            startHour: 4,
+            startMinute: 0,
+            calendar: calendar
+        )
+        #expect(sameWindow == window)
+
+        // 自定义起点（例如 05:30）
+        let custom = AppCalendar.dayWindow(
+            anchoredOn: date("2026-09-15 10:00"),
+            startHour: 5,
+            startMinute: 30,
+            calendar: calendar
+        )
+        #expect(timeFormatter.string(from: custom.start) == "05:30")
+        #expect(timeFormatter.string(from: custom.end) == "05:30")
+        #expect(AppCalendar.dayKey(for: custom.end, calendar: calendar) == "2026-09-16")
+    }
 }

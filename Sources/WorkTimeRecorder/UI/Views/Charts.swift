@@ -198,6 +198,10 @@ final class DayTimelineView: NSView {
         didSet { needsDisplay = true }
     }
 
+    var calendar: Calendar = AppCalendar.calendar() {
+        didSet { needsDisplay = true }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let labelHeight: CGFloat = 16
         let barHeight: CGFloat = max(12, bounds.height - labelHeight - 6)
@@ -206,6 +210,17 @@ final class DayTimelineView: NSView {
 
         Theme.chartTrack.setFill()
         NSBezierPath(roundedRect: barRect, xRadius: 6, yRadius: 6).fill()
+
+        // 每 6 小时一条分隔线
+        for step in 1..<4 {
+            let x = barRect.minX + barRect.width * CGFloat(step) / 4
+            let gridLine = NSBezierPath()
+            gridLine.move(to: NSPoint(x: x, y: barRect.minY))
+            gridLine.line(to: NSPoint(x: x, y: barRect.maxY))
+            gridLine.lineWidth = 1
+            Theme.gridLine.setStroke()
+            gridLine.stroke()
+        }
 
         for segment in segments {
             let startRatio = max(0, min(1, segment.start.timeIntervalSince(interval.start) / total))
@@ -229,14 +244,21 @@ final class DayTimelineView: NSView {
             .font: Fonts.system(9),
             .foregroundColor: NSColor.tertiaryLabelColor
         ]
-        for hour in [0, 6, 12, 18, 24] {
-            let ratio = CGFloat(hour) / 24
-            let text = "\(hour):00"
+        for step in 0...4 {
+            let ratio = CGFloat(step) / 4
+            let tick = interval.start.addingTimeInterval(total * Double(ratio))
+            let text = labelText(for: tick)
             let size = (text as NSString).size(withAttributes: attributes)
             var x = bounds.width * ratio - size.width / 2
             x = min(max(0, x), bounds.width - size.width)
             (text as NSString).draw(at: NSPoint(x: x, y: 0), withAttributes: attributes)
         }
+    }
+
+    /// 窗口起点当天显示 `04:00`，跨过午夜后显示 `次日04:00`。
+    private func labelText(for date: Date) -> String {
+        let text = AppCalendar.formatter("HH:mm", calendar: calendar).string(from: date)
+        return calendar.isDate(date, inSameDayAs: interval.start) ? text : "次日\(text)"
     }
 
     override func viewDidChangeEffectiveAppearance() {
