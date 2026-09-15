@@ -21,6 +21,9 @@ final class StatusItemController: NSObject {
         popover.contentViewController = popoverController
         popover.behavior = .transient
         popover.animates = true
+        popoverController.onModalStateChange = { [weak self] isModal in
+            self?.popover.behavior = isModal ? .applicationDefined : .transient
+        }
 
         if let button = statusItem.button {
             button.imagePosition = .imageLeading

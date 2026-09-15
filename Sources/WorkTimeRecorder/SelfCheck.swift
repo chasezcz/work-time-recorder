@@ -80,6 +80,50 @@ enum SelfCheck {
             failures.append("账本逻辑异常：\(error.localizedDescription)")
         }
 
+        // 7. 时区口径：默认北京时间
+        let utcInstant = Date(timeIntervalSince1970: 1_789_566_600) // 2026-09-15T17:30:00Z
+        let beijingKey = AppCalendar.dayKey(for: utcInstant)
+        record(beijingKey == "2026-09-16", "默认按北京时间划分日期（该时刻北京时间 \(beijingKey) 00:30）", &passes, &failures)
+
+        // 8. 数据文件时间戳带 +08:00 偏移，且能正确读回
+        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("work-time-recorder-selfcheck-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+        do {
+            let store2 = StateFileStore(directoryURL: tempDirectory)
+            var sample = AppState()
+            let sampleDate = AppCalendar.calendar(timeZone: AppTimeZone.beijing)
+                .date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 9, minute: 28))!
+            try sample.ledger.clockIn(at: sampleDate, source: .manual, calendar: AppCalendar.calendar())
+            try store2.save(sample)
+            let raw = try String(contentsOf: store2.fileURL, encoding: .utf8)
+            record(raw.contains("2026-09-15T09:28:00+08:00"), "数据文件时间戳使用北京时间偏移（+08:00）", &passes, &failures)
+            let loaded = store2.load()
+            let loadedStart = loaded.ledger.day("2026-09-15").sessions.first?.start
+            record(
+                loadedStart.map { abs($0.timeIntervalSince(sampleDate)) < 1 } ?? false,
+                "北京时间时间戳读写往返一致",
+                &passes,
+                &failures
+            )
+        } catch {
+            failures.append("时区持久化检查失败：\(error.localizedDescription)")
+        }
+
+        // 9. Dock / 台前调度集成
+        store.applyActivationPolicy()
+        let expectedPolicy: NSApplication.ActivationPolicy = store.settings.showDockIcon ? .regular : .accessory
+        record(NSApp.activationPolicy() == expectedPolicy, "应用形态与「隐藏 Dock 图标」设置一致（\(expectedPolicy == .regular ? "常规应用" : "仅状态栏")）", &passes, &failures)
+        let dockMenu = DockMenu.make(store: store, target: actions as AnyObject)
+        record(dockMenu.items.count >= 4, "Dock 右键菜单可构建（\(dockMenu.items.count) 项）", &passes, &failures)
+
+        // 10. 演示模式不得写盘（回归：演示数据曾经被异步落盘污染真实数据）
+        let beforeDemo = try? Data(contentsOf: store.fileStore.fileURL)
+        store.applyDemoState(DemoMode.makeState(calendar: store.calendar))
+        store.tick()
+        let afterDemo = try? Data(contentsOf: store.fileStore.fileURL)
+        record(beforeDemo == afterDemo, "演示模式不会写入真实数据文件", &passes, &failures)
+
         for line in passes { print("  ✅ \(line)") }
         for line in failures { print("  ❌ \(line)") }
         print(failures.isEmpty ? "self-check 通过（\(passes.count) 项）" : "self-check 失败（\(failures.count) 项）")

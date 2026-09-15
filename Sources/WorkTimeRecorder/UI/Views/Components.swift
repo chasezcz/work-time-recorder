@@ -110,6 +110,8 @@ final class InfoRowView: NSView {
         ])
         titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
+        valueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        valueLabel.lineBreakMode = .byTruncatingTail
     }
 
     @available(*, unavailable)

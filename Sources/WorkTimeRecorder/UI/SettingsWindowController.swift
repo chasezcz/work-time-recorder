@@ -14,6 +14,7 @@ final class SettingsWindowController: NSWindowController {
         )
         window.title = "工时记录器设置"
         window.minSize = NSSize(width: 560, height: 480)
+        window.collectionBehavior.insert(.fullScreenPrimary)
         window.contentViewController = SettingsViewController(store: store)
         window.setContentSize(NSSize(width: 620, height: 720))
         window.center()
@@ -85,6 +86,14 @@ final class SettingsViewController: NSViewController {
     private lazy var refreshHolidayButton = NSButton(title: "立即更新", target: self, action: #selector(refreshHolidays))
 
     private lazy var menuBarTimeSwitch: NSSwitch = makeSwitch(action: #selector(menuBarTimeToggled(_:)))
+    private lazy var hideDockIconSwitch: NSSwitch = makeSwitch(action: #selector(hideDockIconToggled(_:)))
+    private lazy var timeZonePopup: NSPopUpButton = {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        popup.target = self
+        popup.action = #selector(timeZoneChanged(_:))
+        return popup
+    }()
     private let dataPathLabel = UI.label("", font: Fonts.system(11), color: .secondaryLabelColor)
 
     init(store: AppStore) {
@@ -119,6 +128,8 @@ final class SettingsViewController: NSViewController {
         content.addArrangedSubview(makeNotificationSection())
         content.addArrangedSubview(makeHolidaySection())
         content.addArrangedSubview(makeMenuBarSection())
+        content.addArrangedSubview(makeIntegrationSection())
+        content.addArrangedSubview(makeTimeZoneSection())
         content.addArrangedSubview(makeDataSection())
         content.addArrangedSubview(makeAboutSection())
 
@@ -225,6 +236,24 @@ final class SettingsViewController: NSViewController {
         )
     }
 
+    private func makeIntegrationSection() -> NSView {
+        section(
+            title: "Dock 与台前调度",
+            rows: [
+                row(title: "隐藏 Dock 图标（只保留状态栏）", control: hideDockIconSwitch)
+            ],
+            hint: "不隐藏时，应用会出现在 Dock 与台前调度里；点击 Dock 图标可打开工时分析，右键 Dock 图标可以快速打卡。勾选隐藏后，应用只保留右上角状态栏图标。"
+        )
+    }
+
+    private func makeTimeZoneSection() -> NSView {
+        section(
+            title: "时区",
+            rows: [row(title: "统计与记录时区", control: timeZonePopup)],
+            hint: "决定一天的划分、界面时间显示，以及数据文件中时间戳的偏移量。默认北京时间（UTC+8），历史记录的时间点不会被改写。"
+        )
+    }
+
     private func makeDataSection() -> NSView {
         let pathRow = UI.horizontalStack(spacing: 8, alignment: .centerY)
         pathRow.addArrangedSubview(UI.label("数据文件", font: Fonts.system(13)))
@@ -247,7 +276,7 @@ final class SettingsViewController: NSViewController {
         return section(
             title: "数据",
             rows: [pathRow, clearRow],
-            hint: "全部数据仅保存在本机，不会上传；只有节假日需要联网获取。CSV 导出在“工时分析 → 导出”里。"
+            hint: "全部数据仅保存在本机，不会上传；只有节假日需要联网获取。时间戳按上面的时区写入（默认北京时间 UTC+8）。CSV 导出在“工时分析 → 导出”里。"
         )
     }
 
@@ -322,7 +351,23 @@ final class SettingsViewController: NSViewController {
         }
 
         menuBarTimeSwitch.state = settings.showTimeInMenuBar ? .on : .off
+        hideDockIconSwitch.state = settings.showDockIcon ? .off : .on
+        refreshTimeZonePopup(settings: settings)
         dataPathLabel.stringValue = store.dataFileURL.path
+    }
+
+    private func refreshTimeZonePopup(settings: Settings) {
+        let menu = NSMenu()
+        let beijing = NSMenuItem(title: AppTimeZone.displayName(identifier: AppTimeZone.beijingIdentifier), action: nil, keyEquivalent: "")
+        beijing.representedObject = AppTimeZone.beijingIdentifier
+        let system = NSMenuItem(title: AppTimeZone.displayName(identifier: AppTimeZone.systemIdentifier), action: nil, keyEquivalent: "")
+        system.representedObject = AppTimeZone.systemIdentifier
+        menu.addItem(beijing)
+        menu.addItem(system)
+        timeZonePopup.menu = menu
+
+        let index = settings.timeZoneIdentifier == AppTimeZone.systemIdentifier ? 1 : 0
+        timeZonePopup.selectItem(at: index)
     }
 
     private func autoClockInDate() -> Date {
@@ -372,6 +417,16 @@ final class SettingsViewController: NSViewController {
     @objc private func menuBarTimeToggled(_ sender: NSSwitch) {
         let enabled = sender.state == .on
         store.updateSettings { $0.showTimeInMenuBar = enabled }
+    }
+
+    @objc private func hideDockIconToggled(_ sender: NSSwitch) {
+        let hidden = sender.state == .on
+        store.updateSettings { $0.showDockIcon = !hidden }
+    }
+
+    @objc private func timeZoneChanged(_ sender: NSPopUpButton) {
+        guard let identifier = sender.selectedItem?.representedObject as? String else { return }
+        store.updateSettings { $0.timeZoneIdentifier = identifier }
     }
 
     @objc private func countryChanged(_ sender: NSTextField) {

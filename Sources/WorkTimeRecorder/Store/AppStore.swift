@@ -31,8 +31,13 @@ final class AppStore: ObservableObject {
     private let screenMonitor: ScreenLockMonitor
     private var tickTimer: Timer?
     private var isStarted = false
+    /// 演示模式下禁止写盘，避免演示数据污染真实记录。
+    private(set) var isDemoMode = false
 
-    var calendar: Calendar { AppCalendar.calendar() }
+    /// 时区口径：默认北京时间，可在设置里切换为跟随系统。
+    var timeZone: TimeZone { state.settings.timeZone }
+
+    var calendar: Calendar { AppCalendar.calendar(timeZone: timeZone) }
 
     init(
         fileStore: StateFileStore = StateFileStore(),
@@ -51,6 +56,7 @@ final class AppStore: ObservableObject {
         guard !isStarted else { return }
         isStarted = true
 
+        applyActivationPolicy()
         NotificationService.shared.requestAuthorizationIfNeeded()
 
         screenMonitor.onUnlock = { [weak self] in
@@ -295,8 +301,32 @@ final class AppStore: ObservableObject {
         mutate(&settings)
         settings.normalize()
         state.settings = settings
+        applyActivationPolicy()
         persist()
         tick()
+    }
+
+    /// 根据设置切换“常规应用（有 Dock 图标、可参与台前调度）”与“仅状态栏”形态。
+    func applyActivationPolicy() {
+        let policy: NSApplication.ActivationPolicy = state.settings.showDockIcon ? .regular : .accessory
+        guard NSApp.activationPolicy() != policy else { return }
+        NSApp.setActivationPolicy(policy)
+    }
+
+    /// 修正某天首次打卡时间，用于补录/纠正上班时间。
+    @discardableResult
+    func correctFirstClockIn(ofDayKey key: String, to date: Date) -> Bool {
+        var ledger = state.ledger
+        guard ledger.correctFirstClockInStart(ofDayKey: key, to: date, calendar: calendar) else {
+            setLastEvent("修正失败：新的时间需要早于下班时间，且在同一天内")
+            return false
+        }
+        state.ledger = ledger
+        let label = AppCalendar.formatter("HH:mm", calendar: calendar).string(from: date)
+        setLastEvent("已把 \(AppCalendar.dayLabel(date, calendar: calendar)) 的首次打卡修正为 \(label)")
+        persist()
+        tick()
+        return true
     }
 
     func setDailyTarget(hours: Double) {
@@ -322,6 +352,7 @@ final class AppStore: ObservableObject {
 
     /// 仅用于 `--demo` 与截图：替换内存状态，不写入磁盘。
     func applyDemoState(_ newState: AppState) {
+        isDemoMode = true
         state = newState
         tick()
     }
@@ -457,6 +488,7 @@ final class AppStore: ObservableObject {
     }
 
     private func persist() {
+        guard !isDemoMode else { return }
         do {
             try fileStore.save(state)
         } catch {

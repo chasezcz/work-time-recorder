@@ -11,6 +11,7 @@ final class PopoverViewController: NSViewController {
     private let dateLabel = UI.label("", font: Fonts.system(15, .semibold))
     private let offDayLabel = UI.label("休息日", font: Fonts.system(10, .medium), color: .secondaryLabelColor)
     private let holidayLabel = UI.label("", font: Fonts.system(10, .medium), color: Theme.warningText)
+    private let demoBadge = StatusPillView()
     private let statusPill = StatusPillView()
 
     // 进度卡
@@ -31,6 +32,18 @@ final class PopoverViewController: NSViewController {
     private let recordHeaderLabel = UI.label("今日记录", font: Fonts.system(11, .semibold), color: .secondaryLabelColor)
     private let recordCountLabel = UI.label("", font: Fonts.system(10), color: .tertiaryLabelColor, alignment: .right)
     private let sessionStack = UI.verticalStack(spacing: 4)
+    private lazy var correctionButton: NSButton = {
+        let button = NSButton(title: "修正", target: self, action: #selector(correctFirstClockInTapped))
+        button.bezelStyle = .rounded
+        button.controlSize = .mini
+        button.font = Fonts.system(10)
+        button.toolTip = "修正今天首次打卡时间"
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    /// 弹出模态框时临时把 popover 设为常驻，避免编辑过程中面板自动收起。
+    var onModalStateChange: ((Bool) -> Void)?
 
     private lazy var analysisButton = FooterButton(title: "分析", symbol: "chart.bar.xaxis", target: self, action: #selector(showAnalysis))
     private lazy var settingsButton = FooterButton(title: "设置", symbol: "gearshape", target: self, action: #selector(showSettings))
@@ -53,7 +66,7 @@ final class PopoverViewController: NSViewController {
         stack.alignment = .width
         root.addSubview(stack)
         let widthConstraint = root.widthAnchor.constraint(equalToConstant: 344)
-        widthConstraint.priority = .defaultHigh
+        widthConstraint.priority = .required
         NSLayoutConstraint.activate([
             widthConstraint,
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: Metrics.contentPadding),
@@ -88,6 +101,10 @@ final class PopoverViewController: NSViewController {
         let left = UI.verticalStack(spacing: 3)
         left.addArrangedSubview(dateLabel)
         let badges = UI.horizontalStack(spacing: 6)
+        demoBadge.text = "演示数据"
+        demoBadge.tint = Theme.warningText
+        demoBadge.isHidden = true
+        badges.addArrangedSubview(demoBadge)
         badges.addArrangedSubview(offDayLabel)
         badges.addArrangedSubview(holidayLabel)
         left.addArrangedSubview(badges)
@@ -145,6 +162,7 @@ final class PopoverViewController: NSViewController {
         let header = UI.horizontalStack(spacing: 8)
         header.addArrangedSubview(recordHeaderLabel)
         header.addArrangedSubview(UI.flexibleSpace())
+        header.addArrangedSubview(correctionButton)
         header.addArrangedSubview(recordCountLabel)
         stack.addArrangedSubview(header)
         stack.addArrangedSubview(sessionStack)
@@ -198,6 +216,7 @@ final class PopoverViewController: NSViewController {
     func refresh() {
         dateLabel.stringValue = store.dayTitle
         offDayLabel.isHidden = !store.todayIsOffDay
+        demoBadge.isHidden = !store.isDemoMode
         holidayLabel.isHidden = store.todayHoliday == nil
         holidayLabel.stringValue = store.todayHoliday?.name ?? ""
 
@@ -241,6 +260,10 @@ final class PopoverViewController: NSViewController {
     private func rebuildSessions() {
         sessionStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         recordCountLabel.stringValue = "\(store.todaySessions.count) 段"
+        correctionButton.isHidden = store.todaySessions.isEmpty
+        if let first = store.todaySessions.first {
+            correctionButton.toolTip = "当前首次打卡 \(UI.time(first.start, calendar: store.calendar))，点击修正"
+        }
 
         guard !store.todaySessions.isEmpty else {
             let empty = UI.label(
@@ -307,6 +330,32 @@ final class PopoverViewController: NSViewController {
             store.setTodayTarget(hours: nil)
         } else {
             store.setTodayTarget(hours: Double(item.tag) / 2)
+        }
+    }
+
+    /// 修正今天首次打卡时间（例如补录成 09:28）。
+    @objc private func correctFirstClockInTapped() {
+        guard let first = store.todaySessions.first else { return }
+        onModalStateChange?(true)
+        defer { onModalStateChange?(false) }
+
+        let alert = NSAlert()
+        alert.messageText = "修正今天首次打卡时间"
+        alert.informativeText = "当前记录为 \(UI.time(first.start, calendar: store.calendar))，选择新的上班时间："
+        alert.alertStyle = .informational
+
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = [.yearMonthDay, .hourMinute]
+        picker.dateValue = first.start
+        picker.maxDate = Date()
+        picker.frame = NSRect(x: 0, y: 0, width: 240, height: 26)
+        alert.accessoryView = picker
+        alert.addButton(withTitle: "保存")
+        alert.addButton(withTitle: "取消")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            store.correctFirstClockIn(ofDayKey: store.todayKey, to: picker.dateValue)
         }
     }
 

@@ -12,6 +12,8 @@ final class AnalysisWindowController: NSWindowController {
         )
         window.title = "工时分析"
         window.minSize = NSSize(width: 920, height: 620)
+        // 常规窗口行为：支持全屏，并按台前调度分组管理。
+        window.collectionBehavior.insert(.fullScreenPrimary)
         window.contentViewController = AnalysisTabViewController(store: store)
         window.setContentSize(NSSize(width: 980, height: 700))
         window.center()
