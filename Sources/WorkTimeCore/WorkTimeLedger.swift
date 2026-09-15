@@ -182,6 +182,28 @@ public struct WorkTimeLedger: Codable, Equatable, Sendable {
         days.removeValue(forKey: key)
     }
 
+    /// 修正某天最早一段打卡的开始时间（例如把今天的首次打卡改成 09:28）。
+    ///
+    /// 新的开始时间必须落在这天内，且早于该段打卡的结束时间。
+    @discardableResult
+    public mutating func correctFirstClockInStart(
+        ofDayKey key: String,
+        to date: Date,
+        calendar: Calendar = AppCalendar.calendar()
+    ) -> Bool {
+        guard AppCalendar.dayKey(for: date, calendar: calendar) == key else { return false }
+        guard var day = days[key], let index = day.sessions.indices.min(by: { day.sessions[$0].start < day.sessions[$1].start }) else {
+            return false
+        }
+        if let end = day.sessions[index].end, date >= end {
+            return false
+        }
+        day.sessions[index].start = date
+        day.sessions.sort { $0.start < $1.start }
+        days[key] = day
+        return true
+    }
+
     public mutating func removeAll() {
         days.removeAll()
     }

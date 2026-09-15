@@ -108,6 +108,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var holidayCountryCode: String
     /// 状态栏是否显示实时工时文字。
     public var showTimeInMenuBar: Bool
+    /// 是否在 Dock 中显示图标（常规应用形态，同时可以使用台前调度）。
+    public var showDockIcon: Bool
+    /// 时区标识：默认北京时间 `Asia/Shanghai`，也可以是 `system` 表示跟随系统。
+    public var timeZoneIdentifier: String
 
     public init(
         dailyTargetSeconds: TimeInterval = Settings.defaultDailyTargetSeconds,
@@ -117,7 +121,9 @@ public struct Settings: Codable, Equatable, Sendable {
         automaticClockOutEnabled: Bool = true,
         notifyWhenTargetReached: Bool = true,
         holidayCountryCode: String = "CN",
-        showTimeInMenuBar: Bool = true
+        showTimeInMenuBar: Bool = true,
+        showDockIcon: Bool = true,
+        timeZoneIdentifier: String = AppTimeZone.beijingIdentifier
     ) {
         self.dailyTargetSeconds = dailyTargetSeconds
         self.automaticClockInEnabled = automaticClockInEnabled
@@ -127,6 +133,8 @@ public struct Settings: Codable, Equatable, Sendable {
         self.notifyWhenTargetReached = notifyWhenTargetReached
         self.holidayCountryCode = holidayCountryCode
         self.showTimeInMenuBar = showTimeInMenuBar
+        self.showDockIcon = showDockIcon
+        self.timeZoneIdentifier = timeZoneIdentifier
     }
 
     public var autoClockInLabel: String {
@@ -135,6 +143,15 @@ public struct Settings: Codable, Equatable, Sendable {
 
     public var dailyTargetLabel: String {
         DurationFormat.text(dailyTargetSeconds)
+    }
+
+    /// 当前设置对应的时区。
+    public var timeZone: TimeZone {
+        AppTimeZone.timeZone(identifier: timeZoneIdentifier)
+    }
+
+    public var timeZoneDisplayName: String {
+        AppTimeZone.displayName(identifier: timeZoneIdentifier)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -146,6 +163,8 @@ public struct Settings: Codable, Equatable, Sendable {
         case notifyWhenTargetReached
         case holidayCountryCode
         case showTimeInMenuBar
+        case showDockIcon
+        case timeZoneIdentifier
     }
 
     public init(from decoder: Decoder) throws {
@@ -159,6 +178,8 @@ public struct Settings: Codable, Equatable, Sendable {
         notifyWhenTargetReached = (try? container.decode(Bool.self, forKey: .notifyWhenTargetReached)) ?? defaults.notifyWhenTargetReached
         holidayCountryCode = (try? container.decode(String.self, forKey: .holidayCountryCode)) ?? defaults.holidayCountryCode
         showTimeInMenuBar = (try? container.decode(Bool.self, forKey: .showTimeInMenuBar)) ?? defaults.showTimeInMenuBar
+        showDockIcon = (try? container.decode(Bool.self, forKey: .showDockIcon)) ?? defaults.showDockIcon
+        timeZoneIdentifier = (try? container.decode(String.self, forKey: .timeZoneIdentifier)) ?? defaults.timeZoneIdentifier
         normalize()
     }
 
@@ -171,6 +192,9 @@ public struct Settings: Codable, Equatable, Sendable {
         autoClockInMinute = min(max(autoClockInMinute, 0), 59)
         let code = holidayCountryCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         holidayCountryCode = code.isEmpty ? "CN" : code
+        if !AppTimeZone.isValid(identifier: timeZoneIdentifier) {
+            timeZoneIdentifier = AppTimeZone.beijingIdentifier
+        }
     }
 }
 

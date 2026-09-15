@@ -73,16 +73,36 @@ public final class StateFileStore {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    private static func makeEncoder() -> JSONEncoder {
+    private static func makeEncoder(timeZone: TimeZone = AppTimeZone.beijing) -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = timeZone
+        formatter.formatOptions = [.withInternetDateTime]
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
     }
 
     private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let text = try container.decode(String.self)
+            if let date = fractional.date(from: text) ?? standard.date(from: text) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "无法解析 ISO8601 时间戳：\(text)"
+            )
+        }
         return decoder
     }
 
@@ -103,7 +123,7 @@ public final class StateFileStore {
     }
 
     public func save(_ state: AppState) throws {
-        let data = try Self.makeEncoder().encode(state)
+        let data = try Self.makeEncoder(timeZone: state.settings.timeZone).encode(state)
         try data.write(to: fileURL, options: .atomic)
     }
 }

@@ -35,7 +35,8 @@ public enum PeriodGranularity: String, CaseIterable, Codable, Identifiable, Send
 ///
 /// 所有"一天"的边界都按本地时区计算，周以周一为一周开始。
 public enum AppCalendar {
-    public static func calendar(timeZone: TimeZone = .current) -> Calendar {
+    /// 默认使用北京时间；需要其他时区时显式传入。
+    public static func calendar(timeZone: TimeZone = AppTimeZone.beijing) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         calendar.firstWeekday = 2
